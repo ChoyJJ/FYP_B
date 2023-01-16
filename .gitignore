@@ -8,3 +8,6 @@ Pass_test/incpetionv3_categoriser/keras_metadata.pb
 Pass_test/incpetionv3_categoriser/saved_model.pb
 Pass_test/incpetionv3_categoriser/variables/variables.data-00000-of-00001
 Pass_test/incpetionv3_categoriser/variables/variables.index
+Pass_test/checkpoint
+Pass_test/inceptionv3_best_model.data-00000-of-00001
+Pass_test/inceptionv3_best_model.index
