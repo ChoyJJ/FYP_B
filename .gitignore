@@ -25,12 +25,13 @@ Pass_test/train_dataset/dataset_spec.pb
 Pass_test/train_dataset/snapshot.metadata
 Pass_test/train_dataset/12420459034979105946/00000000.shard/00000000.snapshot
 .gitignore
-Pass_test/InceptionV3_0.6/fingerprint.pb
+Models
+Pass_test/InceptionV3_0.6/
 Pass_test/InceptionV3_0.6/keras_metadata.pb
 Pass_test/InceptionV3_0.6/saved_model.pb
 Pass_test/InceptionV3_0.6/variables/variables.data-00000-of-00001
 Pass_test/InceptionV3_0.6/variables/variables.index
-Pass_test/training_checkpoint/checkpoint
+Pass_test/training_checkpoint/
 Pass_test/training_checkpoint/cp-0001.ckpt.data-00000-of-00001
 Pass_test/training_checkpoint/cp-0001.ckpt.index
 Pass_test/training_checkpoint/cp-0002.ckpt.data-00000-of-00001
