@@ -346,3 +346,4 @@ Pass_test/training_3_checkpoint/cp-0011.ckpt.index
 Pass_test/training2_checkpoint/cp-0042.ckpt.data-00000-of-00001
 Pass_test/training2_checkpoint/cp-0042.ckpt.index
 Checkpoint
+.vscode
