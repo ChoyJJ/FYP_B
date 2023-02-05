@@ -77,44 +77,6 @@ AUTOTUNE = tf.data.AUTOTUNE
 train_ds_aug = train_combined.prefetch(buffer_size=AUTOTUNE).shuffle(1000)
 
 # %%
-model.compile(
-    optimizer= tf.keras.optimizers.Adam(learning_rate = 1e-4),
-    loss=tf.keras.losses.BinaryCrossentropy(),
-    metrics=[tf.keras.metrics.BinaryAccuracy(),tf.keras.metrics.FalsePositives(),tf.keras.metrics.FalseNegatives()]
-    # ,jit_compile=True
-)
-model.summary()
-checkpoint_path = "/home/jj/FYP/Checkpoint/EfficientNet_vindr/dense_init_checkpoint/cp-{epoch:04d}.ckpt"
-checkpoint_dir = os.path.dirname(checkpoint_path)
-cp_callback = tf.keras.callbacks.ModelCheckpoint(
-    filepath=checkpoint_path, 
-    verbose=1, 
-    # monitor='val_loss',
-    # save_best_only=True,
-    save_weights_only=True,
-    save_freq='epoch')
-
-# %%
-#Training Dense layers to initialise the categoriser before fine tuning the CNN models
-total_epochs = 10
-dense_init = model.fit(train_ds_aug
-                    ,epochs=total_epochs
-                    ,validation_data=val_combined
-                    ,callbacks = [cp_callback]
-                    )
-# model.save(save_dir + "inceptionv3")
-plt.figure(figsize=(30,10))
-plt.subplot(131)
-plt.plot(dense_init.history['loss'])
-plt.subplot(132)
-plt.plot(dense_init.history['val_loss'])
-plt.subplot(133)
-plt.plot(dense_init.history['val_binary_accuracy'])
-
-# %%
-dense_init.history
-
-# %%
 #load model with best performance
 model.load_weights("/home/jj/FYP/Checkpoint/EfficientNet_vindr/dense_init_checkpoint/cp-0009.ckpt")
 pre_trained.trainable = True
