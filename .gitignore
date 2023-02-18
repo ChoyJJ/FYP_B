@@ -12,3 +12,5 @@ Pass_test/training2_checkpoint
 Pass_test/training_3_checkpoint
 Checkpoint
 .vscode
+log
+Training Models/__pycache__/
