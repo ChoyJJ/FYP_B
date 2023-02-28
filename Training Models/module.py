@@ -1,6 +1,8 @@
 import tensorflow as tf
 import csv
 import os
+import numpy as np
+import shutil
 
 class Model_Training:
     def pretrained_network(name='inceptionv3',img_height=300,img_width=300):
@@ -105,12 +107,15 @@ class Model_Training:
                     break
         return model, all_history
 
-    def build_model(pretrained_model,trainable_layers=False,augmentation=True,regulariser=False,load_weights = False,img_height=300,img_width=300):
+    def build_model(pretrained_model,trainable_layers=False,augmentation=True,Flatten='flatten',regulariser=False,load_weights = False,img_height=300,img_width=300,
+                    optimiser=tf.keras.optimizers.Adam(),
+                    losses = tf.keras.losses.CategoricalCrossentropy(),
+                    metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)]):
         data_augmentation = tf.keras.Sequential([
           tf.keras.layers.RandomFlip('horizontal_and_vertical'),
-          tf.keras.layers.RandomRotation((0,0.2),fill_mode='reflect'),
-          tf.keras.layers.RandomZoom(height_factor=(-0.2,0.2),width_factor=(-0.2,0.2),fill_mode='reflect'),
-          tf.keras.layers.RandomTranslation(height_factor=(-0.1,0.1),width_factor=(-0.1,0.1),fill_mode='reflect')
+          tf.keras.layers.RandomRotation((-0.2,0.2),fill_mode='nearest'),
+          tf.keras.layers.RandomZoom(height_factor=(-0.2,0.7),width_factor=(-0.2,0.7),fill_mode='nearest'),
+          tf.keras.layers.RandomTranslation(height_factor=(-0.1,0.1),width_factor=(-0.1,0.1),fill_mode='nearest')
           ])
         preprocessing,pre_trained = Model_Training.pretrained_network(name=pretrained_model,img_height=img_height,img_width=img_width)
         if trainable_layers:
@@ -129,9 +134,16 @@ class Model_Training:
         else:
             pre_process = preprocessing(tfinput)
         tl_model=pre_trained(pre_process,training=False)
-        flatten = tf.keras.layers.Flatten()(tl_model)
-        x = tf.keras.layers.Dense(8,activation = 'relu')(flatten)
-        x = tf.keras.layers.Dense(8,activation='relu')(x)
+        if Flatten == 'flatten':
+            flatten = tf.keras.layers.Flatten()(tl_model)
+            x = tf.keras.layers.Dense(128,activation = 'relu')(flatten)
+        elif Flatten == 'global_average_pooling':
+            flatten = tf.keras.layers.GlobalAveragePooling2D()(tl_model)
+            x = tf.keras.layers.Dense(2048,activation = 'relu')(flatten)
+        elif Flatten == 'global_max_pooling':
+            flatten = tf.keras.layers.GlobalMaxPooling2D()(tl_model)
+            x = tf.keras.layers.Dense(2048,activation = 'relu')(flatten)
+        x = tf.keras.layers.Dense(1024,activation='relu')(x)
         x= tf.keras.layers.Dropout(0.5)(x)
         if regulariser:
             x = tf.keras.layers.Dense(8,activation='relu',kernel_regularizer=regulariser)(x)
@@ -142,6 +154,11 @@ class Model_Training:
         model.summary()
         if load_weights:
             model.load_weights(load_weights)
+        model.compile(
+                        optimizer= optimiser,
+                        loss=losses,
+                        metrics=metrics
+                    ) 
         return model
     
     def main(           pretrained_model,
@@ -151,6 +168,7 @@ class Model_Training:
                         patience=False,
                         Earlystop=False,
                         augmentation = True,
+                        flatten = 'flatten',
                         trainable_layers = False,
                         regulariser=False,
                         train_log=False,
@@ -159,26 +177,77 @@ class Model_Training:
                         learning_rate=1e-3,
                         optimiser=tf.keras.optimizers.Adam(),
                         losses = tf.keras.losses.CategoricalCrossentropy(),
-                        metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Precision(class_id=0),tf.keras.metrics.Precision(class_id=1)],
+                        metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)],
                         callbacks = [],
                         img_height=300,img_width=300):
         """
         pretrained_model is the name of the CNN model used in this transfer learning method
         """
-        model = Model_Training.build_model(pretrained_model,trainable_layers,augmentation,regulariser,load_weights,img_height,img_width)
+        model = Model_Training.build_model(pretrained_model,trainable_layers,augmentation,flatten,regulariser,load_weights,img_height,img_width,optimiser,losses,metrics)
         optimiser.lr = learning_rate
-        model.compile(
-            optimizer= optimiser,
-            loss=losses,
-            metrics=metrics
-        ) 
+        
+        
+        
+        
+        
         model, history = Model_Training.training(model,train_dataset,validation_dataset,epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser)
 
 
         return model, history
     
+    def misclassified_images(   model,test_dataset,load_weights=False,
+                                optimiser=tf.keras.optimizers.Adam(),
+                                losses = tf.keras.losses.CategoricalCrossentropy(),
+                                metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)]
+                                ):
+        if load_weights:
+            model.load_weights(load_weights)
+        model.compile(
+                        optimizer= optimiser,
+                        loss=losses,
+                        metrics=metrics
+                        ) 
+        labels = ['benign','malignant']
+        model.evaluate(test_dataset)
+        test_predictions = model.predict(test_dataset)
+        test_predicted_labels = np.argmax(test_predictions, axis=1)
+        test_predicted_labels = [labels[i] for i in test_predicted_labels]
+        test_true_labels = np.concatenate([y for x, y in test_dataset], axis=0)
+        misclassified_indices = []
+        for i,y in enumerate(test_true_labels):
+            if y[1] == 1:
+                if test_predicted_labels[i] != labels[1]:
+                    misclassified_indices.append(i)
+            elif y[0] == 1:
+                if test_predicted_labels[i] != labels[0]:
+                    misclassified_indices.append(i)
+        test_filenames = test_dataset.file_paths
+        misclassified_images = [test_filenames[i] for i in misclassified_indices]
+
+        return misclassified_images
     
-    
+    def store_misclassified(model,test_dataset,dst,load_weights=False,
+                            optimiser=tf.keras.optimizers.Adam(),
+                            losses = tf.keras.losses.CategoricalCrossentropy(),
+                            metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)]
+                            ):
+        misclassified = Model_Training.misclassified_images( model,test_dataset,load_weights,optimiser,losses,metrics)
+        dest_dir_path = dst
+        os.makedirs(dest_dir_path, exist_ok=True)
+        os.makedirs(dest_dir_path+'benign/', exist_ok=True)
+        os.makedirs(dest_dir_path+'malignant/', exist_ok=True)
+        for path in misclassified:
+            # get the filename
+            filename = os.path.basename(path)
+            if path.split('/')[-2] == 'malignant':
+            # copy the file to the destination directory
+                dest_path = os.path.join(dest_dir_path+'malignant', filename)
+                shutil.copyfile(path, dest_path)
+            if path.split('/')[-2] == 'benign':
+            # copy the file to the destination directory
+                dest_path = os.path.join(dest_dir_path+'benign', filename)
+                shutil.copyfile(path, dest_path)
+        return misclassified
     
     
     
