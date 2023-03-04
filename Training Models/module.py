@@ -109,14 +109,14 @@ class Model_Training:
                     break
         return model, all_history
 
-    def build_model(self,pretrained_model,trainable_layers=False,augmentation=True,Flatten='flatten',regulariser=None,load_weights = False,img_height=300,img_width=300,
+    def build_model(self,pretrained_model,trainable_layers=False,augmentation=True,Flatten='global_average_pooling',regulariser=None,load_weights = False,img_height=300,img_width=300,
                     optimiser=tf.keras.optimizers.Adam(),
                     losses = tf.keras.losses.CategoricalCrossentropy(),
                     metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)]):
         data_augmentation = tf.keras.Sequential([
           tf.keras.layers.RandomFlip('horizontal_and_vertical'),
-          tf.keras.layers.RandomRotation((-0.2,0.2),fill_mode='constant'),
-          tf.keras.layers.RandomZoom(height_factor=(-0.5,0.5),width_factor=(-0.5,0.5),fill_mode='constant'),
+          tf.keras.layers.RandomRotation((-0.1,0.1),fill_mode='constant'),
+          tf.keras.layers.RandomZoom(height_factor=(-0.2,0.2),width_factor=(-0.2,0.2),fill_mode='constant'),
           tf.keras.layers.RandomTranslation(height_factor=(-0.2,0.2),width_factor=(-0.2,0.2),fill_mode='constant')
           ])
         preprocessing,pre_trained = self.pretrained_network(name=pretrained_model,img_height=img_height,img_width=img_width)
@@ -137,16 +137,18 @@ class Model_Training:
             pre_process = preprocessing(tfinput)
         tl_model=pre_trained(pre_process,training=False)
         if Flatten == 'flatten':
+            # pooling = tf.keras.layers.AveragePooling2D((4,4),strides=(2,2),padding='same')(tl_model)
             flatten = tf.keras.layers.Flatten()(tl_model)
-            x = tf.keras.layers.Dense(128,activation = 'relu')(flatten)
+            x = tf.keras.layers.Dense(8,activation = 'relu')(flatten)
         elif Flatten == 'global_average_pooling':
             flatten = tf.keras.layers.GlobalAveragePooling2D()(tl_model)
-            x = tf.keras.layers.Dense(4096,activation = 'relu')(flatten)
+            # x= tf.keras.layers.Dropout(0.5)(flatten)
+            x = tf.keras.layers.Dense(2048,activation = 'relu')(flatten)
         elif Flatten == 'global_max_pooling':
             flatten = tf.keras.layers.GlobalMaxPooling2D()(tl_model)
             x = tf.keras.layers.Dense(2048,activation = 'relu')(flatten)
-        x = tf.keras.layers.Dense(1024,activation='relu')(x)
-        x= tf.keras.layers.Dropout(0.7)(x)
+        # x = tf.keras.layers.Dense(1024,activation='relu')(x)
+        x= tf.keras.layers.Dropout(0.5)(x)
         if regulariser != None:
             x = tf.keras.layers.Dense(8,activation='relu',kernel_regularizer=regulariser)(x)
         else:
@@ -170,7 +172,7 @@ class Model_Training:
                         patience=False,
                         Earlystop=False,
                         augmentation = True,
-                        flatten = 'flatten',
+                        flatten = 'global_average_pooling',
                         trainable_layers = False,
                         regulariser=False,
                         train_log=False,
@@ -181,18 +183,24 @@ class Model_Training:
                         losses = tf.keras.losses.CategoricalCrossentropy(),
                         metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)],
                         callbacks = [],
-                        img_height=300,img_width=300):
+                        img_height=300,img_width=300,
+                        plot=True):
         """
         pretrained_model is the name of the CNN model used in this transfer learning method
         """
         model = self.build_model(pretrained_model,trainable_layers,augmentation,flatten,regulariser,load_weights,img_height,img_width,optimiser,losses,metrics)
         optimiser.lr = learning_rate
-        
-        
-        
-        
-        
         model, history = self.training(model,train_dataset,validation_dataset,epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser)
+        if plot:
+            plt.figure(figsize=(30,10))
+            plt.subplot(221)
+            plt.plot(history['train_loss'])
+            plt.subplot(222)
+            plt.plot(history['val_loss'])
+            plt.subplot(223)
+            plt.plot(history['train_acc'])
+            plt.subplot(224)
+            plt.plot(history['val_acc'])
 
 
         return model, history
@@ -294,7 +302,7 @@ class Model_Training:
             ax.set_yticklabels(classes)
 
             # Add annotations
-            thresh = confusion_matrix.max() / 2
+            thresh = (confusion_matrix.max()-confusion_matrix.min()) / 2 + confusion_matrix.min()
             for i in range(len(classes)):
                 for j in range(len(classes)):
                     ax.text(j, i, format(confusion_matrix[i, j], 'd'),
