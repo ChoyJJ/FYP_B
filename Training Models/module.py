@@ -35,7 +35,7 @@ class Model_Training:
             pre_trained = tf.keras.applications.inception_v3.InceptionV3(weights='imagenet', include_top=False, input_shape=(img_height,img_width,3))   
         return preprocessing, pre_trained
     
-    def training(self,model,train_dataset,validation_dataset,total_epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser):
+    def training(self,model,train_dataset,validation_dataset,total_epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser,initialise,learning_rate):
 
         best_weights = None
         best_val_loss = float('inf')
@@ -45,7 +45,7 @@ class Model_Training:
         all_history['train_acc'] = []
         all_history['val_loss'] = []
         all_history['val_acc'] = []
-        min_lr = 1e-6
+        min_lr = learning_rate*0.001
         if Earlystop == False:
             Earlystop = total_epochs
         if patience == False:
@@ -60,6 +60,9 @@ class Model_Training:
             writer.writerow(new_dict)
             log.close()
         earlystop_counter = 0
+        if initialise:
+            optimiser.lr = initialise
+            cnt=0
         with tf.device('/GPU:0'):
             for i in range(total_epochs):
                 # print("Epoch: {}".format(i))
@@ -86,7 +89,7 @@ class Model_Training:
                     log.close()
                 # val_improve = val_loss<best_val_loss and
                 if val_loss < best_val_loss:
-                    best_weights = model.get_weights()
+                    # best_weights = model.get_weights()
                     model.save_weights(save_weights)
                     best_val_loss = val_loss
                     patience_counter = 0
@@ -94,16 +97,21 @@ class Model_Training:
                 else:
                     patience_counter += 1
                     earlystop_counter +=1
-                # Check if we have reached the patience limit
-                if patience_counter == patience:
-                    # Load the best weights back into the model_fine
-                    model.set_weights(best_weights)
-                    # Reduce the learning rate
-                    if optimiser.lr > min_lr:
-                        optimiser.lr = optimiser.lr * 0.1
-                    # Reset the patience counter
+                # Initialise weight with lower learning rate
+                if initialise and cnt<5:
+                    cnt+=1
+                    optimiser.lr = initialise + (learning_rate-initialise)*cnt/5
                     patience_counter = 0
-                #Earlystop if model is not improving
+                else:
+                    if patience_counter >= patience:
+                        # Load the best weights back into the model_fine
+                        # model.set_weights(best_weights)
+                        # Reduce the learning rate
+                        if optimiser.lr > min_lr:
+                            optimiser.lr = optimiser.lr * 0.1
+                        # Reset the patience counter
+                        patience_counter = 0
+                    #Earlystop if model is not improving
                 if earlystop_counter == Earlystop:
                     print(f'Early Stop at Epoch: {i+1}')
                     break
@@ -112,10 +120,11 @@ class Model_Training:
     def build_model(self,pretrained_model,trainable_layers=False,augmentation=True,Flatten='global_average_pooling',regulariser=None,load_weights = False,img_height=300,img_width=300,
                     optimiser=tf.keras.optimizers.Adam(),
                     losses = tf.keras.losses.CategoricalCrossentropy(),
-                    metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)]):
+                    metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)]
+                    ):
         data_augmentation = tf.keras.Sequential([
           tf.keras.layers.RandomFlip('horizontal_and_vertical'),
-          tf.keras.layers.RandomRotation((-0.1,0.1),fill_mode='constant'),
+          tf.keras.layers.RandomRotation((-0.2,0.2),fill_mode='constant'),
           tf.keras.layers.RandomZoom(height_factor=(-0.2,0.2),width_factor=(-0.2,0.2),fill_mode='constant'),
           tf.keras.layers.RandomTranslation(height_factor=(-0.2,0.2),width_factor=(-0.2,0.2),fill_mode='constant')
           ])
@@ -139,7 +148,7 @@ class Model_Training:
         if Flatten == 'flatten':
             # pooling = tf.keras.layers.AveragePooling2D((4,4),strides=(2,2),padding='same')(tl_model)
             flatten = tf.keras.layers.Flatten()(tl_model)
-            x = tf.keras.layers.Dense(8,activation = 'relu')(flatten)
+            x = tf.keras.layers.Dense(8,activation = 'relu')(x)
         elif Flatten == 'global_average_pooling':
             flatten = tf.keras.layers.GlobalAveragePooling2D()(tl_model)
             # x= tf.keras.layers.Dropout(0.5)(flatten)
@@ -147,12 +156,8 @@ class Model_Training:
         elif Flatten == 'global_max_pooling':
             flatten = tf.keras.layers.GlobalMaxPooling2D()(tl_model)
             x = tf.keras.layers.Dense(2048,activation = 'relu')(flatten)
-        # x = tf.keras.layers.Dense(1024,activation='relu')(x)
         x= tf.keras.layers.Dropout(0.5)(x)
-        if regulariser != None:
-            x = tf.keras.layers.Dense(8,activation='relu',kernel_regularizer=regulariser)(x)
-        else:
-            x = tf.keras.layers.Dense(8,activation='relu')(x)
+        x = tf.keras.layers.Dense(8,activation='relu',kernel_regularizer=regulariser)(x)
         output = tf.keras.layers.Dense(2, activation="softmax")(x)
         model = tf.keras.models.Model(tfinput,output)
         model.summary()
@@ -174,11 +179,12 @@ class Model_Training:
                         augmentation = True,
                         flatten = 'global_average_pooling',
                         trainable_layers = False,
-                        regulariser=False,
+                        regulariser=None,
                         train_log=False,
                         load_weights = False,
                         save_weights = '/home/jj/FYP/Checkpoint/Placeholder/bestmodel',
                         learning_rate=1e-3,
+                        init_lr=False,
                         optimiser=tf.keras.optimizers.Adam(),
                         losses = tf.keras.losses.CategoricalCrossentropy(),
                         metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)],
@@ -189,8 +195,8 @@ class Model_Training:
         pretrained_model is the name of the CNN model used in this transfer learning method
         """
         model = self.build_model(pretrained_model,trainable_layers,augmentation,flatten,regulariser,load_weights,img_height,img_width,optimiser,losses,metrics)
-        optimiser.lr = learning_rate
-        model, history = self.training(model,train_dataset,validation_dataset,epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser)
+        # optimiser.lr = learning_rate
+        model, history = self.training(model,train_dataset,validation_dataset,epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser,init_lr,learning_rate)
         if plot:
             plt.figure(figsize=(30,10))
             plt.subplot(221)
@@ -212,13 +218,13 @@ class Model_Training:
                                 ):
         if load_weights:
             model.load_weights(load_weights)
-        model.compile(
-                        optimizer= optimiser,
-                        loss=losses,
-                        metrics=metrics
-                        ) 
+            model.compile(
+                            optimizer= optimiser,
+                            loss=losses,
+                            metrics=metrics
+                            ) 
         labels = ['benign','malignant']
-        model.evaluate(test_dataset)
+        # model.evaluate(test_dataset)
         test_predictions = model.predict(test_dataset)
         test_predicted_labels = np.argmax(test_predictions, axis=1)
         test_predicted_labels = [labels[i] for i in test_predicted_labels]
@@ -343,13 +349,13 @@ class Model_Training:
         # Plot ROC curves for each class and micro-average
         plt.figure()
         lw = 2
-        plt.plot(fpr["micro"], tpr["micro"], color='darkorange',
-                 lw=lw, label='micro-average ROC curve (area = {0:0.2f})'
-                 ''.format(roc_auc["micro"]))
-        for i in range(y_true.shape[1]):
-            plt.plot(fpr[i], tpr[i], lw=lw,
-                     label='ROC curve of class {0} (area = {1:0.2f})'
-                     ''.format(i, roc_auc[i]))
+        # plt.plot(fpr["micro"], tpr["micro"], color='darkorange',
+                #  lw=lw, label='micro-average ROC curve (area = {0:0.2f})'
+                #  ''.format(roc_auc["micro"]))
+        # for i in range(y_true.shape[1]):
+        plt.plot(fpr[1], tpr[1], lw=lw,
+                    label='ROC curve (area = {1:0.2f})'
+                    ''.format(1, roc_auc[1]))
 
         plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
         plt.xlim([0.0, 1.0])
