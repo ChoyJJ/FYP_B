@@ -45,7 +45,7 @@ class Model_Training:
         all_history['train_acc'] = []
         all_history['val_loss'] = []
         all_history['val_acc'] = []
-        min_lr = learning_rate*0.001
+        min_lr = 1e-6
         if Earlystop == False:
             Earlystop = total_epochs
         if patience == False:
