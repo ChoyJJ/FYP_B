@@ -48,8 +48,8 @@ class Model_Training:
         min_lr = 1e-6
         if Earlystop == False:
             Earlystop = total_epochs
-        if patience == False:
-            patience = total_epochs
+        # if patience == False:
+            # patience = total_epochs
         if train_log:
             new_dict = {'Epoch','train_loss','train_accuracy','val_loss','val_accuracy'}
             directory = '/'.join(train_log.split('/')[:-1])
@@ -98,12 +98,18 @@ class Model_Training:
                     patience_counter += 1
                     earlystop_counter +=1
                 # Initialise weight with lower learning rate
+                
+                # print(patience)
                 if initialise and cnt<5:
                     cnt+=1
-                    optimiser.lr = initialise + (learning_rate-initialise)*cnt/5
+                    optimiser.lr = initialise + np.power((learning_rate-initialise),(1+(5-cnt)/10))
                     patience_counter = 0
                 else:
-                    if patience_counter >= patience:
+                    if patience == False:
+                        # print(np.power((learning_rate-min_lr),(1+(total_epochs-(cnt-3))/100)))
+                        optimiser.lr = learning_rate - np.power((learning_rate-min_lr),(1+(total_epochs-(cnt-3))/100))
+                        cnt+=1
+                    elif patience_counter >= patience:
                         # Load the best weights back into the model_fine
                         # model.set_weights(best_weights)
                         # Reduce the learning rate
@@ -111,7 +117,10 @@ class Model_Training:
                             optimiser.lr = optimiser.lr * 0.1
                         # Reset the patience counter
                         patience_counter = 0
-                    #Earlystop if model is not improving
+                    
+                    
+                    
+                #Earlystop if model is not improving
                 if earlystop_counter == Earlystop:
                     print(f'Early Stop at Epoch: {i+1}')
                     break
@@ -123,7 +132,7 @@ class Model_Training:
                     metrics = [tf.keras.metrics.CategoricalAccuracy(),tf.keras.metrics.Recall(class_id=0),tf.keras.metrics.Recall(class_id=1)]
                     ):
         data_augmentation = tf.keras.Sequential([
-          tf.keras.layers.RandomFlip('horizontal_and_vertical'),
+        #   tf.keras.layers.RandomFlip('horizontal_and_vertical'),
           tf.keras.layers.RandomRotation((-0.2,0.2),fill_mode='constant'),
           tf.keras.layers.RandomZoom(height_factor=(-0.2,0.2),width_factor=(-0.2,0.2),fill_mode='constant'),
           tf.keras.layers.RandomTranslation(height_factor=(-0.2,0.2),width_factor=(-0.2,0.2),fill_mode='constant')
@@ -147,17 +156,21 @@ class Model_Training:
         tl_model=pre_trained(pre_process,training=False)
         if Flatten == 'flatten':
             # pooling = tf.keras.layers.AveragePooling2D((4,4),strides=(2,2),padding='same')(tl_model)
-            flatten = tf.keras.layers.Flatten()(tl_model)
+            x = tf.keras.layers.Flatten()(tl_model)
             x = tf.keras.layers.Dense(8,activation = 'relu')(x)
         elif Flatten == 'global_average_pooling':
-            flatten = tf.keras.layers.GlobalAveragePooling2D()(tl_model)
+            x = tf.keras.layers.GlobalAveragePooling2D()(tl_model)
+            # x= tf.keras.layers.Dropout(0.6)(x)
             # x= tf.keras.layers.Dropout(0.5)(flatten)
-            x = tf.keras.layers.Dense(2048,activation = 'relu')(flatten)
+            x = tf.keras.layers.Dense(1024,activation = 'relu')(x)
         elif Flatten == 'global_max_pooling':
-            flatten = tf.keras.layers.GlobalMaxPooling2D()(tl_model)
-            x = tf.keras.layers.Dense(2048,activation = 'relu')(flatten)
+            x = tf.keras.layers.GlobalMaxPooling2D()(tl_model)
+            x = tf.keras.layers.Dense(1024,activation = 'relu',kernel_regularizer=regulariser)(x)
+        
+        x = tf.keras.layers.Dense(8,activation='relu')(x)
         x= tf.keras.layers.Dropout(0.5)(x)
         x = tf.keras.layers.Dense(8,activation='relu',kernel_regularizer=regulariser)(x)
+        # x= tf.keras.layers.Dropout(0.5)(x)
         output = tf.keras.layers.Dense(2, activation="softmax")(x)
         model = tf.keras.models.Model(tfinput,output)
         model.summary()
@@ -196,6 +209,7 @@ class Model_Training:
         """
         model = self.build_model(pretrained_model,trainable_layers,augmentation,flatten,regulariser,load_weights,img_height,img_width,optimiser,losses,metrics)
         # optimiser.lr = learning_rate
+        # print(patience)
         model, history = self.training(model,train_dataset,validation_dataset,epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser,init_lr,learning_rate)
         if plot:
             plt.figure(figsize=(30,10))
@@ -343,8 +357,8 @@ class Model_Training:
             roc_auc[i] = auc(fpr[i], tpr[i])
 
         # Compute micro-average ROC curve and AUC
-        fpr["micro"], tpr["micro"], _ = roc_curve(y_true.ravel(), y_pred.ravel())
-        roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+        # fpr["micro"], tpr["micro"], _ = roc_curve(y_true.ravel(), y_pred.ravel())
+        # roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
 
         # Plot ROC curves for each class and micro-average
         plt.figure()
@@ -365,9 +379,9 @@ class Model_Training:
         plt.title('Receiver operating characteristic')
         plt.legend(loc="lower right")
         plt.show()
-        auc_score = roc_auc_score(y_true, prediction)
+        # auc_score = roc_auc_score(y_true[:,], prediction[:,1])
 
-        return auc_score
+        return roc_auc[1]
 
     
     
