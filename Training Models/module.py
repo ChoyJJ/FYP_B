@@ -204,12 +204,13 @@ class Model_Training:
         
         x = tf.keras.layers.Dense(1024)(x)
         x = ReLU(x)
-        x= tf.keras.layers.Dropout(0.5)(x,training=training)
+        if augmentation:
+            x= tf.keras.layers.Dropout(0.5)(x,training=training)
         x = tf.keras.layers.Dense(1024,kernel_regularizer=regulariser)(x)
         x = ReLU(x)
         output = tf.keras.layers.Dense(2, activation="softmax",kernel_initializer="random_uniform")(x)
         model = tf.keras.models.Model(tfinput,output)
-        model.summary()
+        # model.summary()
         if load_weights != False:
             model.load_weights(load_weights)
         model.compile(
