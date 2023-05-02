@@ -38,7 +38,7 @@ class Model_Training:
         return preprocessing, pre_trained
     
     def training(self,model,train_dataset,validation_dataset,total_epochs,save_weights,patience,Earlystop,train_log,callbacks,optimiser,initialise,learning_rate,
-                 warmup_epochs,cosine_epochs,min_lr,class_weight):
+                 warmup_epochs,cosine_epochs=0,min_lr=0,class_weight=None):
 
         best_weights = None
         best_val_loss = float('inf')
